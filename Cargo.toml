@@ -3,6 +3,9 @@ name = "vmi"
 version = "0.1.0"
 edition = "2021"
 build = "build.rs"
+authors = ["fengjian <445077+fengjian@users.noreply.github.com>"]
+description = "The official *-sys library for interfacing with libvmi"
+license = "GPL-2.0"
 
 [build-dependencies]
 bindgen = "0.69.1"
