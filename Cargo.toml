@@ -1,0 +1,13 @@
+[package]
+name = "vmi"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[build-dependencies]
+bindgen = "0.69.1"
+
+[dependencies]
+libc = "0.2"
+anyhow = "1.0"
+thiserror = "1.0"
