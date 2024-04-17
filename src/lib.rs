@@ -255,16 +255,57 @@ impl VmiInstance {
         }
     }
 
+    pub fn vmi_init_paging(&self) -> Result<()> {
+        unsafe {
+            if vmi_init_paging(self.vmi, 0) == VMI_PM_UNKNOWN {
+                bail!("vmi init error paging")
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn vmi_init_os(&self, config_mode: Option<u32>, config: Option<&str>) -> Result<()> {
+        let mut error: vmi_init_error_t = 0;
+        let config_ptr = if let Some(config) = config {
+            CString::new(config)?
+        } else {
+            CString::default()
+        };
+
+        unsafe {
+            if vmi_init_os(
+                self.vmi,
+                config_mode.unwrap_or(vmi_config_VMI_CONFIG_GLOBAL_FILE_ENTRY),
+                config_ptr.as_ptr() as *mut _,
+                &mut error as *mut _,
+            ) == os_VMI_OS_UNKNOWN
+            {
+                bail!("Unable to init os, errcode: {}", error)
+            }
+        }
+
+        Ok(())
+    }
+
+    #[inline]
     pub fn as_mut_ptr(&self) -> vmi_instance_t {
         self.vmi
     }
 
+    #[inline]
     pub fn vmi_get_os_type(&self) -> os_t {
         unsafe { vmi_get_ostype(self.vmi) }
     }
 
+    #[inline]
     pub fn vmi_get_winver(&self) -> win_ver_t {
         unsafe { vmi_get_winver(self.vmi) }
+    }
+
+    #[inline]
+    pub fn vmi_get_address_width(&self) -> u8 {
+        unsafe { vmi_get_address_width(self.vmi) }
     }
 
     pub fn vmi_get_access_mode(&self) -> Result<vmi_mode_t> {
@@ -298,6 +339,7 @@ impl VmiInstance {
     }
 
     //vmi_pagecache_flush
+    #[inline]
     pub fn vmi_pagecache_flush(&self) {
         unsafe { vmi_pagecache_flush(self.vmi) }
     }
@@ -330,6 +372,33 @@ impl VmiInstance {
                 Ok(offset)
             }
         }
+    }
+
+    pub fn vmi_get_kernel_struct_offset(
+        &self,
+        struct_name: &str,
+        member_name: &str,
+    ) -> Result<addr_t> {
+        let mut addr: addr_t = 0;
+        unsafe {
+            let struct_name = CString::new(struct_name)?;
+            let member_name = CString::new(member_name)?;
+            if vmi_get_kernel_struct_offset(
+                self.vmi,
+                struct_name.as_ptr(),
+                member_name.as_ptr(),
+                &mut addr,
+            ) == status_VMI_FAILURE
+            {
+                bail!(
+                    "Unable to get kernel struct offset \"{:?}\" \"{:?}\"",
+                    struct_name,
+                    member_name
+                )
+            }
+        }
+
+        Ok(addr)
     }
 
     pub fn vmi_pause_vm(&self) -> Result<()> {
@@ -438,6 +507,7 @@ impl VmiInstance {
     }
 
     //vmi_get_mem_event
+    #[inline]
     pub fn vmi_get_mem_event(&self, gfn: addr_t, access: vmi_mem_access_t) -> *mut vmi_event_t {
         unsafe { vmi_get_mem_event(self.vmi, gfn, access) }
     }
@@ -844,7 +914,7 @@ impl VmiInstance {
         unsafe {
             let s = vmi_read_str_va(self.vmi, vaddr, pid as _);
 
-            if s == (null::<i8>() as *mut _) {
+            if s.is_null() {
                 bail!(format!(
                     "Unable to read string from address 0x{:X} for PID {}",
                     vaddr, pid
@@ -857,6 +927,39 @@ impl VmiInstance {
                 free(s as *mut _);
 
                 Ok(c_str)
+            }
+        }
+    }
+
+    //pub fn vmi_read_unicode_str_va
+    pub fn vmi_read_unicode_str_va(&self, vaddr: addr_t, pid: i32) -> Result<String> {
+        unsafe {
+            let us = vmi_read_unicode_str_va(self.vmi, vaddr, pid as _);
+            if us.is_null() {
+                bail!(format!(
+                    "Unable to read string from address 0x{:X} for PID {}",
+                    vaddr, pid
+                ))
+            } else {
+                let mut out: unicode_string_t = unicode_string_t {
+                    length: 0,
+                    contents: std::ptr::null_mut(),
+                    encoding: std::ptr::null_mut(),
+                };
+
+                let utf8 = CString::new("UTF-8")?;
+                let status = vmi_convert_str_encoding(us, &mut out, utf8.as_ptr());
+
+                vmi_free_unicode_str(us);
+                let out_str = out.contents as *const i8;
+
+                if !out_str.is_null() && status == status_VMI_SUCCESS {
+                    let s = CStr::from_ptr(out_str).to_str()?.to_owned();
+                    libc::free(out.contents as *mut _);
+                    return Ok(s);
+                }
+
+                bail!("Unable to convert str encoding")
             }
         }
     }
@@ -910,7 +1013,7 @@ impl VmiInstance {
             let name = CString::new(name)?;
             let s = vmi_read_str_ksym(self.vmi, name.as_ptr() as *mut _);
 
-            if s == (null::<i8>() as *mut _) {
+            if s.is_null() {
                 bail!("Unable to read string from symbol {:?}", name)
             } else {
                 // Allocate a normal rust string
