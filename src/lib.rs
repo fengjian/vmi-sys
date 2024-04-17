@@ -2,7 +2,6 @@ mod libvmi_c;
 
 use std::alloc::{alloc, dealloc, Layout};
 use std::ffi::{CStr, CString};
-use std::ptr::null;
 
 // We sometimes need to free pointers returned by libvmi
 use anyhow::{bail, Result};
@@ -306,6 +305,11 @@ impl VmiInstance {
     #[inline]
     pub fn vmi_get_address_width(&self) -> u8 {
         unsafe { vmi_get_address_width(self.vmi) }
+    }
+
+    #[inline]
+    pub fn vmi_get_page_mode(&self, vcpu: ::std::os::raw::c_ulong) -> page_mode_t {
+        unsafe { vmi_get_page_mode(self.vmi, vcpu) }
     }
 
     pub fn vmi_get_access_mode(&self) -> Result<vmi_mode_t> {
@@ -1094,8 +1098,7 @@ impl VmiInstance {
     pub fn vmi_read_str_pa(&self, paddr: addr_t) -> Result<String> {
         unsafe {
             let s = vmi_read_str_pa(self.vmi, paddr);
-
-            if s == (null::<i8>() as *mut _) {
+            if s.is_null() {
                 bail!(format!(
                     "Unable to read string from physical address 0x{:X}",
                     paddr
