@@ -125,6 +125,13 @@ pub fn setup_event_emul_insn(event: *mut vmi_event_t, emul_insn: *mut emul_insn_
 }
 
 #[inline]
+pub fn setup_event_emul_read(event: *mut vmi_event_t, emul_read: *mut emul_read_t)  {
+    unsafe {
+        (*event).__bindgen_anon_2.emul_read = emul_read;
+    }
+}
+
+#[inline]
 pub fn get_interrupt_event<'a>(
     event: *mut vmi_event_t,
 ) -> &'a mut interrupt_event__bindgen_ty_1__bindgen_ty_1 {
@@ -342,18 +349,53 @@ impl VmiInstance {
         }
     }
 
+    //vmi_set_vcpureg
+    pub fn vmi_set_vcpureg(&self, value: u64, reg: reg_t, vcpu: ::std::os::raw::c_ulong) -> Result<()> {
+        unsafe {
+            if vmi_set_vcpureg(self.vmi, value, reg, vcpu) == status_VMI_FAILURE {
+                bail!("Unable to set vcpu register")
+            } else {
+                Ok(())
+            }
+        }
+    }
+
     //vmi_pagecache_flush
     #[inline]
     pub fn vmi_pagecache_flush(&self) {
         unsafe { vmi_pagecache_flush(self.vmi) }
     }
 
+    #[inline]
+    pub fn vmi_dtb_to_pid(&self, dtb: addr_t) -> Result<vmi_pid_t> {
+        unsafe {
+            let mut pid: vmi_pid_t = 0;
+            if vmi_dtb_to_pid(self.vmi, dtb, &mut pid as *mut _) == status_VMI_FAILURE {
+                bail!("Unable to convert dtb to pid")
+            } else {
+                Ok(pid)
+            }
+        }
+    }
+
+    //impl pid_to_dtb
+    #[inline]
+    pub fn vmi_pid_to_dtb(&self, pid: vmi_pid_t) -> Result<addr_t> {
+        unsafe {
+            let mut dtb: addr_t = 0;
+            if vmi_pid_to_dtb(self.vmi, pid, &mut dtb as *mut _) == status_VMI_FAILURE {
+                bail!("Unable to convert pid to dtb")
+            } else {
+                Ok(dtb)
+            }
+        }
+    }
+
     //vmi_pagetable_lookup
     pub fn vmi_pagetable_lookup(&self, pt: addr_t, vaddr: addr_t) -> Result<addr_t> {
         unsafe {
             let mut value: addr_t = 0;
-            if vmi_pagetable_lookup(self.vmi, pt, vaddr, &mut value as *mut _) == status_VMI_FAILURE
-            {
+            if vmi_pagetable_lookup(self.vmi, pt, vaddr, &mut value as *mut _) == status_VMI_FAILURE {
                 bail!("Unable to lookup page table")
             } else {
                 Ok(value)
@@ -800,6 +842,30 @@ impl VmiInstance {
             } else {
                 Ok(())
             }
+        }
+    }
+
+    pub fn vmi_read_va_buf(&self, vaddr: addr_t, pid: i32, buf: &mut [u8], count: usize) -> Result<()> {
+        unsafe {
+            let mut bytes_read: usize = 0;
+            if vmi_read_va(
+                self.vmi,
+                vaddr,
+                pid as _,
+                count,
+                buf.as_mut_ptr() as *mut _,
+                &mut bytes_read as *mut _,
+            ) == status_VMI_FAILURE
+            {
+                bail!(
+                    "Unable to read {} bytes from address 0x{:X} for PID {}",
+                    count,
+                    vaddr,
+                    pid
+                )
+            }
+
+            Ok(())
         }
     }
 
