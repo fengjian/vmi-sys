@@ -630,6 +630,29 @@ impl VmiInstance {
         }
     }
 
+    //pub fn vmi_write
+    pub fn vmi_write(&self, ctx: *const access_context_t, buf: &[u8]) -> Result<()> {
+        unsafe {
+            let mut bytes_written: usize = 0;
+            if vmi_write(
+                self.vmi,
+                ctx,
+                buf.len(),
+                buf.as_ptr() as *mut _,
+                &mut bytes_written as *mut _,
+            ) == status_VMI_FAILURE
+            {
+                bail!(
+                    "Unable to write {} bytes",
+                    buf.len()
+                )
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+
     pub fn vmi_write_va(&self, vaddr: addr_t, pid: i32, buf: &[u8]) -> Result<()> {
         unsafe {
             let mut bytes_written: usize = 0;
@@ -845,6 +868,25 @@ impl VmiInstance {
         }
     }
 
+    //vmi_read_buf
+    pub fn vmi_read_buf(&self, ctx: *const access_context_t, buf: &mut [u8], count: usize) -> Result<()> {
+        unsafe {
+            let mut bytes_read: usize = 0;
+            if vmi_read(
+                self.vmi,
+                ctx,
+                count,
+                buf.as_mut_ptr() as *mut _,
+                &mut bytes_read as *mut _,
+            ) == status_VMI_FAILURE
+            {
+                bail!("Unable to read {} bytes", count)
+            } else {
+                Ok(())
+            }
+        }
+    }
+
     pub fn vmi_read_va_buf(&self, vaddr: addr_t, pid: i32, buf: &mut [u8], count: usize) -> Result<()> {
         unsafe {
             let mut bytes_read: usize = 0;
@@ -997,6 +1039,35 @@ impl VmiInstance {
                 free(s as *mut _);
 
                 Ok(c_str)
+            }
+        }
+    }
+
+    pub fn vmi_read_unicode_str(&self, ctx: *const access_context_t) -> Result<String> {
+        unsafe {
+            let us = vmi_read_unicode_str(self.vmi, ctx);
+            if us.is_null() {
+                bail!("Unable to read unicode string")
+            } else {
+                let mut out: unicode_string_t = unicode_string_t {
+                    length: 0,
+                    contents: std::ptr::null_mut(),
+                    encoding: std::ptr::null_mut(),
+                };
+
+                let utf8 = CString::new("UTF-8")?;
+                let status = vmi_convert_str_encoding(us, &mut out, utf8.as_ptr());
+
+                vmi_free_unicode_str(us);
+                let out_str = out.contents as *const i8;
+
+                if !out_str.is_null() && status == status_VMI_SUCCESS {
+                    let s = CStr::from_ptr(out_str).to_str()?.to_owned();
+                    libc::free(out.contents as *mut _);
+                    return Ok(s);
+                }
+
+                bail!("Unable to convert str encoding")
             }
         }
     }
