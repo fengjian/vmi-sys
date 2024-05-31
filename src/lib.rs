@@ -125,7 +125,7 @@ pub fn setup_event_emul_insn(event: *mut vmi_event_t, emul_insn: *mut emul_insn_
 }
 
 #[inline]
-pub fn setup_event_emul_read(event: *mut vmi_event_t, emul_read: *mut emul_read_t)  {
+pub fn setup_event_emul_read(event: *mut vmi_event_t, emul_read: *mut emul_read_t) {
     unsafe {
         (*event).__bindgen_anon_2.emul_read = emul_read;
     }
@@ -349,11 +349,42 @@ impl VmiInstance {
         }
     }
 
+    pub fn vmi_get_vcpuregs(&self, vcpu: ::std::os::raw::c_ulong) -> Result<registers_t> {
+        unsafe {
+            let mut regs = std::mem::zeroed();
+            if vmi_get_vcpuregs(self.vmi, &mut regs, vcpu) == status_VMI_FAILURE {
+                bail!("Unable to get vcpu registers")
+            } else {
+                Ok(regs)
+            }
+        }
+    }
+
     //vmi_set_vcpureg
-    pub fn vmi_set_vcpureg(&self, value: u64, reg: reg_t, vcpu: ::std::os::raw::c_ulong) -> Result<()> {
+    pub fn vmi_set_vcpureg(
+        &self,
+        value: u64,
+        reg: reg_t,
+        vcpu: ::std::os::raw::c_ulong,
+    ) -> Result<()> {
         unsafe {
             if vmi_set_vcpureg(self.vmi, value, reg, vcpu) == status_VMI_FAILURE {
                 bail!("Unable to set vcpu register")
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    //vmi_set_vcpuregs
+    pub fn vmi_set_vcpuregs(
+        &self,
+        regs: &mut registers_t,
+        vcpu: ::std::os::raw::c_ulong,
+    ) -> Result<()> {
+        unsafe {
+            if vmi_set_vcpuregs(self.vmi, regs, vcpu) == status_VMI_FAILURE {
+                bail!("Unable to set vcpu registers")
             } else {
                 Ok(())
             }
@@ -395,7 +426,8 @@ impl VmiInstance {
     pub fn vmi_pagetable_lookup(&self, pt: addr_t, vaddr: addr_t) -> Result<addr_t> {
         unsafe {
             let mut value: addr_t = 0;
-            if vmi_pagetable_lookup(self.vmi, pt, vaddr, &mut value as *mut _) == status_VMI_FAILURE {
+            if vmi_pagetable_lookup(self.vmi, pt, vaddr, &mut value as *mut _) == status_VMI_FAILURE
+            {
                 bail!("Unable to lookup page table")
             } else {
                 Ok(value)
@@ -642,16 +674,12 @@ impl VmiInstance {
                 &mut bytes_written as *mut _,
             ) == status_VMI_FAILURE
             {
-                bail!(
-                    "Unable to write {} bytes",
-                    buf.len()
-                )
+                bail!("Unable to write {} bytes", buf.len())
             } else {
                 Ok(())
             }
         }
     }
-
 
     pub fn vmi_write_va(&self, vaddr: addr_t, pid: i32, buf: &[u8]) -> Result<()> {
         unsafe {
@@ -869,7 +897,12 @@ impl VmiInstance {
     }
 
     //vmi_read_buf
-    pub fn vmi_read_buf(&self, ctx: *const access_context_t, buf: &mut [u8], count: usize) -> Result<()> {
+    pub fn vmi_read_buf(
+        &self,
+        ctx: *const access_context_t,
+        buf: &mut [u8],
+        count: usize,
+    ) -> Result<()> {
         unsafe {
             let mut bytes_read: usize = 0;
             if vmi_read(
@@ -887,7 +920,13 @@ impl VmiInstance {
         }
     }
 
-    pub fn vmi_read_va_buf(&self, vaddr: addr_t, pid: i32, buf: &mut [u8], count: usize) -> Result<()> {
+    pub fn vmi_read_va_buf(
+        &self,
+        vaddr: addr_t,
+        pid: i32,
+        buf: &mut [u8],
+        count: usize,
+    ) -> Result<()> {
         unsafe {
             let mut bytes_read: usize = 0;
             if vmi_read_va(
